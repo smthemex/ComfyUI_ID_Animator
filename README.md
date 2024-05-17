@@ -18,22 +18,22 @@ If the module is missing, please refer to the separate installation of the missi
 3 Download the checkpoints   下载模型
 ----
 
-3.1 dir ComfyUI_ID_Animator/models  
+3.1 dir.. ComfyUI_ID_Animator/models  
 - Download ID-Animator checkpoint https://huggingface.co/spaces/ID-Animator/ID-Animator/blob/main/animator.ckpt  
 
-3.2 dir ComfyUI_ID_Animator/models/animatediff_models    
+3.2 dir.. ComfyUI_ID_Animator/models/animatediff_models    
 - Download AnimateDiff checkpoint https://huggingface.co/spaces/ID-Animator/ID-Animator/blob/main/mm_sd_v15_v2.ckpt   
 
-3.3 dir comfy/modles/diffusers  
+3.3 dir.. comfy/models/diffusers  
 - Download Stable Diffusion V1.5 all files  https://huggingface.co/spaces/ID-Animator/ID-Animator/tree/main/animatediff/sd   
   or   
 - Download Stable Diffusion V1.5 most files https://huggingface.co/runwayml/stable-diffusion-v1-5/tree/main      
 
-3.4 dir comfy/modles/checkpoints   
+3.4 dir.. comfy/models/checkpoints   
 - Download realisticVisionV60B1 https://huggingface.co/spaces/ID-Animator/ID-Animator/blob/main/realisticVisionV60B1_v51VAE.safetensors  
   or  any other dreambooth models  
   
-3.5 dir ComfyUI_ID_Animator/models/image_encoder      
+3.5 dir.. ComfyUI_ID_Animator/models/image_encoder      
 - Download CLIP Image encoder https://huggingface.co/spaces/ID-Animator/ID-Animator/tree/main/image_encoder   
 
 3.6  other models       
