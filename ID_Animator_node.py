@@ -282,7 +282,7 @@ class ID_Animator:
         path_ckpt = os.path.join(dir_path, "models", "animator.ckpt")
         path_dream = os.path.join(other_model_path,checkpoints_list)
         path_motion = os.path.join(dir_path, "models/animatediff_models/mm_sd_v15_v2.ckpt")
-        path_img = os.path.join(dir_path, "models/IP-Adapter")
+        path_img = os.path.join(dir_path, "models/image_encoder")
 
         # print(inference_config, path_dream, path_ckpt, path_motion)
 
