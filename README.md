@@ -3,6 +3,15 @@
 ## NOTICE
 You can find ID_Animator in this link  [ID_Animator](https://github.com/ID-Animator/ID-Animator)  
 
+Update
+---
+2024-06-05   
+1、输出改成单帧图像，方便接其他的视频合成节点，取消原作保存gif动画的选项。  
+2、新增模型加载菜单，逻辑上更清晰一些，你可以多放几个动作模型进“.. ComfyUI_ID_Animator/models/animatediff_models”目录   
+
+1. Change the output to a single frame image for easy access to other video synthesis nodes, and remove the option to save the original GIF animation.  
+2. Add a new model loading menu to make the logic clearer. You can add a few more action models to the ".. ComfyUI-ID-Animator/models/animateddiff_models" directory  
+
 1.Installation  安装   
 ----
  ``` python 
@@ -47,7 +56,7 @@ Because "ID_Animator"does not indicate the open source license agreement, I have
 5 example 示例
 ----
 
-![](https://github.com/smthemex/ComfyUI_ID_Animator/blob/main/demo/example.png)
+![](https://github.com/smthemex/ComfyUI_ID_Animator/blob/main/demo/exapmle.png)
 
 
 6 Contact "ID_Animator" 
