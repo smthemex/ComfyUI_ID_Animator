@@ -5,6 +5,8 @@
 import os
 import random
 import sys
+from einops import rearrange
+import torchvision
 import yaml
 import torch
 import cv2
@@ -38,19 +40,9 @@ dir_path = os.path.dirname(os.path.abspath(__file__))
 path_dir = os.path.dirname(dir_path)
 file_path = os.path.dirname(path_dir)
 
-
-yamlPath = os.path.join(file_path, "extra_model_paths.yaml")
-if os.path.isfile(yamlPath):
-    f = open(yamlPath, 'r', encoding='utf-8')
-    d1 = yaml.load(f,Loader=yaml.SafeLoader)
-    a111 = d1['a111'] if d1['a111'] is not None else []
-    if a111 != "":
-        other_path =a111['base_path'] if a111['base_path'] is not None else ''
-        other_checkpoint = a111['checkpoints'] if a111['checkpoints'] is not None else ''
-        other_model_path = os.path.join(other_path, other_checkpoint)
-else:
-    other_model_path = os.path.join(file_path,"models","checkpoints")
-
+motion_path = os.path.join(dir_path, "models","animatediff_models",)
+motion_model_list = os.listdir(motion_path)
+#print(motion_model_list)
 
 paths = []
 for search_path in folder_paths.get_folder_paths("diffusers"):
@@ -60,9 +52,25 @@ for search_path in folder_paths.get_folder_paths("diffusers"):
                 paths.append(os.path.relpath(root, start=search_path))
 
 if paths != []:
-    paths = [] + [x for x in paths if x]
+    paths = ["none"] + [x for x in paths if x]
 else:
-    paths = ["no model in default diffusers directory", ]
+    paths = ["none", ]
+
+def tensor_to_image(tensor):
+    # tensor = tensor.cpu()
+    image_np = tensor.squeeze().mul(255).clamp(0, 255).byte().numpy()
+    image = Image.fromarray(image_np, mode='RGB')
+    return image
+def phi2narry(img):
+    img = torch.from_numpy(np.array(img).astype(np.float32) / 255.0).unsqueeze(0)
+    return img
+
+def narry_list(list_in):
+    for i in range(len(list_in)):
+        value = list_in[i]
+        modified_value = phi2narry(value)
+        list_in[i] = modified_value
+    return list_in
 
 
 scheduler_list = [
@@ -134,14 +142,14 @@ def get_sheduler(name):
 def get_local_path(file_path, model_path):
     path = os.path.join(file_path, "models", "diffusers", model_path)
     model_path = os.path.normpath(path)
-    if sys.platform.startswith('win32'):
+    if sys.platform=='win32':
         model_path = model_path.replace('\\', "/")
     return model_path
 
 
 def get_instance_path(path):
     os_path = os.path.normpath(path)
-    if sys.platform.startswith('win32'):
+    if sys.platform=='win32':
         os_path = os_path.replace('\\', "/")
     return os_path
 
@@ -150,18 +158,12 @@ class ID_Animator:
 
     def __init__(self):
         pass
-
-    def tensor_to_image(self, tensor):
-        tensor = tensor.cpu()
-        image_np = tensor.squeeze().mul(255).clamp(0, 255).byte().numpy()
-        image = Image.fromarray(image_np, mode='RGB')
-        return image
-
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "image": ("IMAGE",),
+                "repo_id": ("STRING", {"forceInput": True}),
                 "prompt": ("STRING", {"multiline": True,
                                       "default": "Iron Man soars through the clouds, his repulsors blazing"}),
                 "negative_prompt": ("STRING", {"multiline": True,
@@ -173,21 +175,19 @@ class ID_Animator:
                                                           "bad proportions, extra limbs, cloned face, disfigured, gross proportions,"
                                                           " malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers,"
                                                           " too many fingers, long neck"}),
-                "model_local_path": (paths,),
-                "repo_id": ("STRING", {"default": "runwayml/stable-diffusion-v1-5"}),
                 "scheduler": (scheduler_list,),
-                "checkpoints_list": (folder_paths.get_filename_list("checkpoints"),),
                 "steps": ("INT", {"default": 30, "min": 1, "max": 2048, "step": 1, "display": "number"}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
                 "cfg": ("FLOAT", {"default": 8, "min": 0.0, "max": 100.0, "step": 0.1, "round": 0.01}),
                 "height": ("INT", {"default": 512, "min": 64, "max": 8192, "step": 64, "display": "number"}),
                 "width": ("INT", {"default": 512, "min": 64, "max": 8192, "step": 64, "display": "number"}),
                 "video_length": ("INT", {"default": 16, "min": 1, "max": 100}),
+                "scale": ("FLOAT", {"default": 0.8, "min": 0.1, "max": 10.0, "step": 0.1, "round": 0.01}),
             }
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("text",)
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
     FUNCTION = "id_animator"
     CATEGORY = "ID_Animator"
 
@@ -269,35 +269,32 @@ class ID_Animator:
                                                       device=torch.device("cuda"), torch_type=torch.float16)
             return id_animator
 
-    def id_animator(self, image, prompt, negative_prompt, model_local_path, repo_id, scheduler,
-                    checkpoints_list,steps,seed, cfg, height, width, video_length):
-        if model_local_path == ["no model in default diffusers directory", ] and repo_id == "":
-            raise "you need fill repo_id or download model in diffusers dir "
-        model_path = get_local_path(file_path, model_local_path)
-        if repo_id == "":
-            repo_id = model_path
+    def get_video_img(self,videos,rescale=False, n_rows=6):
+        videos = rearrange(videos, "b c t h w -> t b c h w")
+        outputs = []
+        for x in videos:
+            x = torchvision.utils.make_grid(x, nrow=n_rows)
+            x = x.transpose(0, 1).transpose(1, 2).squeeze(-1)
+            if rescale:
+                x = (x + 1.0) / 2.0  # -1,1 -> 0,1
+            x=tensor_to_image(x)
+            outputs.append(x)
+        return outputs
 
-        inference_config = f"{dir_path}/inference-v2.yaml"
-        sd_version = repo_id
-        path_ckpt = os.path.join(dir_path, "models", "animator.ckpt")
-        path_dream = os.path.join(other_model_path,checkpoints_list)
-        path_motion = os.path.join(dir_path, "models/animatediff_models/mm_sd_v15_v2.ckpt")
-        path_img = os.path.join(dir_path, "models/image_encoder")
 
-        # print(inference_config, path_dream, path_ckpt, path_motion)
-
-        id_ckpt = get_instance_path(path_ckpt)
-        image_encoder_path = get_instance_path(path_img)
-        dreambooth_model_path = get_instance_path(path_dream)
-        motion_module_path = get_instance_path(path_motion)
-        text_encode_global = globals()
+    def id_animator(self, image, repo_id,prompt, negative_prompt, scheduler
+                    ,steps,seed, cfg, height, width, video_length,scale):
+        repo_id,dreambooth_model_path,motion_models=repo_id.split(",",2)
+        inference_config = get_instance_path(os.path.join(dir_path,"inference-v2.yaml"))
+        id_ckpt = get_instance_path(os.path.join(dir_path, "models", "animator.ckpt"))
+        image_encoder_path = get_instance_path(os.path.join(dir_path, "models","image_encoder"))
         app = FaceAnalysis(name="buffalo_l", providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
         app.prepare(ctx_id=0, det_size=(320, 320))
 
-        animator = self.load_model(inference_config, sd_version, scheduler, id_ckpt, image_encoder_path,
-                                   dreambooth_model_path, motion_module_path)
+        animator = self.load_model(inference_config, repo_id, scheduler, id_ckpt, image_encoder_path,
+                                   dreambooth_model_path, motion_models)
 
-        Pil_img = self.tensor_to_image(image)
+        Pil_img = tensor_to_image(image)
         img = cv2.cvtColor(np.asarray(Pil_img), cv2.COLOR_RGB2BGR)
         faces = app.get(img)
         face_roi = face_align.norm_crop(img, faces[0]['kps'], 112)
@@ -309,20 +306,59 @@ class ID_Animator:
                                    width=width,
                                    height=height,
                                    video_length=video_length,
-                                   scale=0.8,
+                                   scale=scale,
                                    )
 
-        filename_prefix = ''.join(random.choice("0123456789") for _ in range(6))+".gif"
-        output = os.path.join(file_path, "output", filename_prefix)
-        save_videos_grid(sample, output)
-        # export_to_video(sample, f"{output}")
-        return (output,)
+        gen =self.get_video_img(sample)  # 获取生成动画单帧的pli列表
+        gen =narry_list(gen) # 列表排序
+        images = torch.from_numpy(np.fromiter(gen, np.dtype((np.float32, (height, width, 3))))) # numpy
+        return (images,)
+
+class ID_Repo_Choice:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "local_model_path": (paths,),
+                "repo_id": ("STRING", {"default": "runwayml/stable-diffusion-v1-5"}),
+                "ckpt_name": (folder_paths.get_filename_list("checkpoints"),),
+                "motion_model": (["none"]+motion_model_list,)
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("repo_id",)
+    FUNCTION = "repo_choice"
+    CATEGORY = "ID_Animator"
+
+    def repo_choice(self, local_model_path, repo_id,ckpt_name,motion_model):
+        if repo_id == "":
+            if local_model_path == "none":
+                raise "you need fill repo_id or download model in diffusers directory "
+            elif local_model_path != "none":
+                model_path = get_local_path(file_path, local_model_path)
+                repo_id = get_instance_path(model_path)
+        elif repo_id != "" and repo_id.find("/") == -1:
+            raise "Incorrect repo_id format"
+        elif repo_id != "" and repo_id.find("\\") != -1:
+            repo_id = get_instance_path(repo_id)
+        if motion_model =="none":
+            raise "you need download motion model in animatediff_models directory "
+        ckpt_path = get_instance_path(folder_paths.get_full_path("checkpoints", ckpt_name))
+        motion_path = get_instance_path(os.path.join(dir_path, "models", "animatediff_models", motion_model))
+        repo_id=repo_id +","+ ckpt_path +","+ motion_path
+        return (repo_id,)
 
 
 NODE_CLASS_MAPPINGS = {
     "ID_Animator": ID_Animator,
+    "ID_Repo_Choice":ID_Repo_Choice
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ID_Animator": "ID_Animator"
+    "ID_Animator": "ID_Animator",
+    "ID_Repo_Choice":"ID_Repo_Choice"
 }
