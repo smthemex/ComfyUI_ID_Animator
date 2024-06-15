@@ -12,6 +12,7 @@ import torch
 import cv2
 from PIL import Image
 import numpy as np
+from huggingface_hub import hf_hub_download
 
 from transformers import CLIPTextModel, CLIPTokenizer
 from omegaconf import OmegaConf
@@ -32,7 +33,6 @@ from .animatediff.utils.convert_from_ckpt import convert_ldm_unet_checkpoint, co
 from .animatediff.utils.util import load_weights
 from .animatediff.pipelines.pipeline_animation import AnimationPipeline
 from .animatediff.models.unet import UNet3DConditionModel
-from .animatediff.utils.util import save_videos_grid, export_to_video
 
 import folder_paths
 
@@ -43,6 +43,11 @@ file_path = os.path.dirname(path_dir)
 motion_path = os.path.join(dir_path, "models","animatediff_models",)
 motion_model_list = os.listdir(motion_path)
 #print(motion_model_list)
+
+adapter_lora_path = os.path.join(dir_path, "models","adapter")
+fonts_lists = os.listdir(adapter_lora_path)
+
+
 
 paths = []
 for search_path in folder_paths.get_folder_paths("diffusers"):
@@ -92,7 +97,6 @@ scheduler_list = [
     "LMS Karras",
     "UniPC",
     "UniPC_Bh2",
-    "TCD"
 ]
 
 
@@ -134,8 +138,6 @@ def get_sheduler(name):
         scheduler = UniPCMultistepScheduler(solver_type="bh1")
     elif name == "UniPC_Bh2":
         scheduler = UniPCMultistepScheduler(solver_type="bh2")
-    elif name == "TCD":
-        scheduler = TCDScheduler
     return scheduler
 
 
@@ -176,12 +178,16 @@ class ID_Animator:
                                                           " malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers,"
                                                           " too many fingers, long neck"}),
                 "scheduler": (scheduler_list,),
+                "adapter_lora": (["none"]+fonts_lists,),
+                "adapter_lora_scale": ("FLOAT", {"default": 1.0, "min": 0.1, "max": 20.0, "step": 0.1,}),
+                "face_lora": (folder_paths.get_filename_list("loras"),),
+                "lora_alpha": ("FLOAT", {"default": 0.8, "min": 0.1, "max": 20.0, "step": 0.1,}),
                 "steps": ("INT", {"default": 30, "min": 1, "max": 2048, "step": 1, "display": "number"}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
                 "cfg": ("FLOAT", {"default": 8, "min": 0.0, "max": 100.0, "step": 0.1, "round": 0.01}),
                 "height": ("INT", {"default": 512, "min": 64, "max": 8192, "step": 64, "display": "number"}),
                 "width": ("INT", {"default": 512, "min": 64, "max": 8192, "step": 64, "display": "number"}),
-                "video_length": ("INT", {"default": 16, "min": 1, "max": 100}),
+                "video_length": ("INT", {"default": 16, "min": 1, "max": 32}),
                 "scale": ("FLOAT", {"default": 0.8, "min": 0.1, "max": 10.0, "step": 0.1, "round": 0.01}),
             }
         }
@@ -192,8 +198,16 @@ class ID_Animator:
     CATEGORY = "ID_Animator"
 
     def load_model(self, inference_config, sd_version, scheduler, id_ckpt, image_encoder_path, dreambooth_model_path,
-                   motion_module_path):
-
+                   motion_module_path, adapter_lora,adapter_lora_scale,face_lora,lora_alpha):
+        face_lora = get_instance_path(folder_paths.get_full_path("loras", face_lora))
+        if adapter_lora=="none":
+            adapter_lora= hf_hub_download(
+                repo_id="guoyww/animatediff",
+                filename="v3_sd15_adapter.ckpt",
+                local_dir=get_instance_path(adapter_lora_path),
+            )
+        else:
+            adapter_lora=get_instance_path(os.path.join(adapter_lora_path,adapter_lora))
         inference_config = OmegaConf.load(inference_config)
 
         tokenizer = CLIPTokenizer.from_pretrained(sd_version, subfolder="tokenizer", torch_dtype=torch.float16,
@@ -224,12 +238,12 @@ class ID_Animator:
             motion_module_path=motion_module_path,
             motion_module_lora_configs=[],
             # domain adapter
-            adapter_lora_path="",
-            adapter_lora_scale=1,
+            adapter_lora_path=adapter_lora,
+            adapter_lora_scale=adapter_lora_scale,
             # image layers
             dreambooth_model_path=None,
-            lora_model_path="",
-            lora_alpha=0.8
+            lora_model_path=face_lora,
+            lora_alpha=lora_alpha
         ).to("cuda")
         if dreambooth_model_path != "":
             print(f"load dreambooth model from {dreambooth_model_path}")
@@ -282,7 +296,7 @@ class ID_Animator:
         return outputs
 
 
-    def id_animator(self, image, repo_id,prompt, negative_prompt, scheduler
+    def id_animator(self, image, repo_id,prompt, negative_prompt, scheduler,adapter_lora,adapter_lora_scale,face_lora,lora_alpha
                     ,steps,seed, cfg, height, width, video_length,scale):
         repo_id,dreambooth_model_path,motion_models=repo_id.split(",",2)
         inference_config = get_instance_path(os.path.join(dir_path,"inference-v2.yaml"))
@@ -292,7 +306,7 @@ class ID_Animator:
         app.prepare(ctx_id=0, det_size=(320, 320))
 
         animator = self.load_model(inference_config, repo_id, scheduler, id_ckpt, image_encoder_path,
-                                   dreambooth_model_path, motion_models)
+                                   dreambooth_model_path, motion_models,adapter_lora,adapter_lora_scale,face_lora,lora_alpha)
 
         Pil_img = tensor_to_image(image)
         img = cv2.cvtColor(np.asarray(Pil_img), cv2.COLOR_RGB2BGR)
@@ -335,6 +349,7 @@ class ID_Repo_Choice:
     CATEGORY = "ID_Animator"
 
     def repo_choice(self, local_model_path, repo_id,ckpt_name,motion_model):
+        motion_model_path = os.path.join(dir_path, "models", "animatediff_models")
         if repo_id == "":
             if local_model_path == "none":
                 raise "you need fill repo_id or download model in diffusers directory "
@@ -346,9 +361,15 @@ class ID_Repo_Choice:
         elif repo_id != "" and repo_id.find("\\") != -1:
             repo_id = get_instance_path(repo_id)
         if motion_model =="none":
-            raise "you need download motion model in animatediff_models directory "
+            motion_path = hf_hub_download(
+                repo_id="guoyww/animatediff",
+                filename="mm_sd_v15_v2.ckpt",
+                local_dir=get_instance_path(motion_model_path),
+            )
+        else:
+            motion_path = get_instance_path(os.path.join(motion_model_path, motion_model))
         ckpt_path = get_instance_path(folder_paths.get_full_path("checkpoints", ckpt_name))
-        motion_path = get_instance_path(os.path.join(dir_path, "models", "animatediff_models", motion_model))
+
         repo_id=repo_id +","+ ckpt_path +","+ motion_path
         return (repo_id,)
 
