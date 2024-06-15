@@ -36,7 +36,13 @@ from .unet_blocks import (
 from einops import repeat, rearrange
 from .resnet import InflatedConv3d
 
-from diffusers.models.unet_2d_condition import UNet2DConditionModel
+import diffusers
+dif_version = str(diffusers.__version__)
+dif_version_int= int(dif_version.split(".")[1])
+if dif_version_int>=28:
+    from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
+else:
+    from diffusers.models.unet_2d_condition import UNet2DConditionModel
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
