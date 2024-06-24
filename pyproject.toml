@@ -1,0 +1,14 @@
+[project]
+name = "comfyui_id_animator"
+description = "This node allows you to use ID_Animator, the zero shot video generation model"
+version = "1.0.0"
+license = "LICENSE"
+
+[project.urls]
+Repository = "https://github.com/smthemex/ComfyUI_ID_Animator"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = ""
+DisplayName = "ComfyUI_ID_Animator"
+Icon = ""
