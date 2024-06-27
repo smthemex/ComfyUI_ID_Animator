@@ -167,7 +167,7 @@ class ID_Animator:
                 "image": ("IMAGE",),
                 "repo_id": ("STRING", {"forceInput": True}),
                 "prompt": ("STRING", {"multiline": True,
-                                      "default": "Iron Man soars through the clouds, his repulsors blazing"}),
+                                      "default": "A girl smiling,8k,best quality."}),
                 "negative_prompt": ("STRING", {"multiline": True,
                                                "default": "semi-realistic, cgi, 3d, render, sketch, cartoon,"
                                                           " drawing, anime, text, close up, cropped, out of frame,"
