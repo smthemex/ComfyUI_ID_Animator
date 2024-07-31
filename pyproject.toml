@@ -2,7 +2,7 @@
 name = "comfyui_id_animator"
 description = "you can using id_animator in comfyUI"
 version = "1.0.0"
-license = "LICENSE"
+license = { file = "LICENSE" }
 
 [project.urls]
 Repository = "https://github.com/smthemex/ComfyUI_ID_Animator"
